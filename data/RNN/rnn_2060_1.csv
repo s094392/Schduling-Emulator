@@ -1,0 +1,4 @@
+Op,duration,Reg/Trd,Mem,Thread
+_,3937,16,0,53248
+forward,448951,86,86,53248
+linear,6784,29,768,53248

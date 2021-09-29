@@ -1,3 +1,4 @@
+import logging
 import uuid
 import torch
 
@@ -31,7 +32,7 @@ class Device:
         self.remain_time = 0
 
     def assign(self, task):
-        print(
+        logging.info(
             f"[Log] Assign layer {task.current_layer} of task {task.model.name} to device {self.name}"
         )
         model = task.model
@@ -45,10 +46,12 @@ class Model:
     def __init__(self, name, layer_input_shape, layer_latency):
         self.id = uuid.uuid4()
         self.name = name
+        self.size = sum([sum(i[1]) for i in layer_latency[1].items()]) / len(layer_latency[1])
         self.layer_input_shape = layer_input_shape
         self.layer_latency = layer_latency
         self.layer_movement_time = self.get_movement_time(
             self.layer_input_shape)
+
 
     @staticmethod
     def get_movement_time(layer_input_shape):

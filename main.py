@@ -35,10 +35,13 @@ def emulate(Tasks, Devices):
                 for device in Devices:
                     if device.type == DeviceType.GPU:
                         if not device.task and len(Tasks):
-                            device.assign(Tasks.pop(0))
+                            schedule(Tasks, device)
         else:
             tail_latency += min_delay
     print(f"[Result] Tail latency: {tail_latency}")
+
+def schedule(Tasks, device):
+    device.assign(Tasks.pop(0))
 
 
 def main():

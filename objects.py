@@ -55,7 +55,7 @@ class Model:
         movement_time = list()
 
         for shape in layer_input_shape:
-            sleep(0.1)
+            torch.cuda.synchronize()
             data = torch.randn(shape)
             data.to(0)
             with torch.autograd.profiler.profile(use_cuda=True) as prof:

@@ -8,13 +8,8 @@ from models.alexnet import get_alexnet
 from models.rnn import get_rnn
 
 
-
-def emulate(Tasks, Devices):
-    Queue  = []
-
-    def update_queue():
-        if len(Tasks) == 0:
-            return
+def emulate(Tasks, Devices, schedule):
+    Queue = []
 
     tail_latency = 0
     while True:
@@ -33,30 +28,45 @@ def emulate(Tasks, Devices):
                     device.remain_time -= min_delay
                     if device.remain_time == 0:
                         if device.task.current_layer + 1 < len(
-                                device.task.model.layer_input_shape): 
+                                device.task.model.layer_input_shape):
                             device.task.current_layer += 1
                             device.assign(device.task)
                         else:
                             device.task = None
 
         if min_delay == float("inf"):
-            if len(Tasks) == 0:
+            if len(Tasks) == 0 and len(Queue) == 0:
                 break
+            if len(Tasks):
+                tail_latency = Tasks[0].arrival_time
         else:
             tail_latency += min_delay
 
+        # update queue
+        while len(Tasks):
+            if Tasks[0].arrival_time <= tail_latency:
+                Queue.append(Tasks.pop(0))
+            else:
+                break;
+        
         for device in Devices:
             if device.type == DeviceType.GPU:
-                if not device.task and len(Tasks):
-                    schedule(Tasks, device)
+                if not device.task and len(Queue):
+                    schedule(Queue, device)
     return tail_latency
 
-def schedule(Tasks, device):
-    device.assign(Tasks.pop(0))
 
+def fifo_schedule(Queue, device):
+    device.assign(Queue.pop(0))
+
+def sjf_schedule(Queue, device):
+    Queue.sort()
+    device.assign(Queue.pop(0))
 
 def main():
-    logging.basicConfig(filename='info.log', encoding='utf-8', level=logging.INFO)
+    logging.basicConfig(filename='info.log',
+                        encoding='utf-8',
+                        level=logging.INFO)
 
     GPU_2060 = GPUSpec("RTX 2060", "2060")
     GPU_1080 = GPUSpec("GTX 1008 Ti", "1080")
@@ -82,31 +92,32 @@ def main():
 
     results = []
     for j in tqdm(range(100)):
-        N = 100
+        N = 1000
         for _ in range(N):
-            Tasks.append(Task(ResNet))
-            Tasks.append(Task(AlexNet))
-            Tasks.append(Task(RNN))
-        random.shuffle(Tasks)
-        tail_latency = emulate(Tasks, Devices)
+            Tasks.append(Task(ResNet, arrival_time=random.randint(0, 4e8)))
+            Tasks.append(Task(AlexNet, arrival_time=random.randint(0, 4e8)))
+            Tasks.append(Task(RNN, arrival_time=random.randint(0, 4e8)))
+        Tasks = sorted(Tasks, key=lambda x: x.arrival_time)
+        tail_latency = emulate(Tasks, Devices, fifo_schedule)
         results.append(tail_latency)
     df = pd.DataFrame(results)
+    print("FIFO result:")
     print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
 
     results = []
     for j in tqdm(range(100)):
-        N = 100
+        N = 1000
         for _ in range(N):
-            Tasks.append(Task(ResNet))
-            Tasks.append(Task(AlexNet))
-            Tasks.append(Task(RNN))
+            Tasks.append(Task(ResNet, arrival_time=random.randint(0, 4e8)))
+            Tasks.append(Task(AlexNet, arrival_time=random.randint(0, 4e8)))
+            Tasks.append(Task(RNN, arrival_time=random.randint(0, 4e8)))
         random.shuffle(Tasks)
-        Tasks = sorted(Tasks, key = lambda x: x.model.size)
-        tail_latency = emulate(Tasks, Devices)
+        Tasks = sorted(Tasks, key=lambda x: x.arrival_time)
+        tail_latency = emulate(Tasks, Devices, sjf_schedule)
         results.append(tail_latency)
     df = pd.DataFrame(results)
+    print("SJF result:")
     print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
-
 
 
 if __name__ == "__main__":

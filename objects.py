@@ -69,8 +69,12 @@ class Model:
 
 
 class Task:
-    def __init__(self, model, current_layer=0, input_data_position=0):
+    def __init__(self, model, current_layer=0, input_data_position=0, arrival_time=0):
         self.id = uuid.uuid4()
         self.model = model
         self.current_layer = current_layer
         self.input_date_position = input_data_position
+        self.arrival_time = arrival_time
+
+    def __lt__(self, other):
+        return self.model.size < other.model.size

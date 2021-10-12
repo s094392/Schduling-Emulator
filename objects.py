@@ -33,7 +33,7 @@ class Device:
 
     def assign(self, task):
         logging.info(
-            f"[Log] Assign layer {task.current_layer} of task {task.model.name} to device {self.name}"
+            f"[Log] Assign layer {task.current_layer} of task {task.model.name} ({task.arrival_time})to device {self.name}"
         )
         model = task.model
         layer_latency = model.layer_latency[1][self.GPUSpec.id][
@@ -75,6 +75,7 @@ class Task:
         self.current_layer = current_layer
         self.input_date_position = input_data_position
         self.arrival_time = arrival_time
+        self.schedule_time = 0
 
     def __lt__(self, other):
         return self.model.size < other.model.size

@@ -1,3 +1,5 @@
+import math
+from copy import deepcopy
 from tqdm import tqdm
 import random
 import logging
@@ -6,10 +8,17 @@ from objects import DeviceType, GPUSpec, Device, Task
 from models.resnet import get_resnet
 from models.alexnet import get_alexnet
 from models.rnn import get_rnn
+from functools import partialmethod
 
+tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
+
+
+def nextTime(rateParameter):
+    return -math.log(1.0 - random.random()) / rateParameter
 
 def emulate(Tasks, Devices, schedule):
     Queue = []
+    DoneTasks = []
 
     tail_latency = 0
     while True:
@@ -20,6 +29,8 @@ def emulate(Tasks, Devices, schedule):
             if device.type == DeviceType.GPU:
                 if device.task:
                     min_delay = min((min_delay, device.remain_time))
+        if len(Tasks):
+            min_delay = min((min_delay, Tasks[0].model.size))
 
         # update remain time of each deivce and assign next layer if avaliable
         for device in Devices:
@@ -45,23 +56,58 @@ def emulate(Tasks, Devices, schedule):
         # update queue
         while len(Tasks):
             if Tasks[0].arrival_time <= tail_latency:
-                Queue.append(Tasks.pop(0))
+                task = Tasks.pop(0)
+                Queue.append(task)
+                DoneTasks.append(task)
             else:
-                break;
-        
+                break
+
         for device in Devices:
             if device.type == DeviceType.GPU:
                 if not device.task and len(Queue):
-                    schedule(Queue, device)
+                    logging.info(
+                        f"[Log] {tail_latency}"
+                    )
+                    schedule(Queue, device, tail_latency)
+
+    model_latencies = {}
+    Tasks.extend(DoneTasks)
     return tail_latency
 
 
-def fifo_schedule(Queue, device):
-    device.assign(Queue.pop(0))
+def fifo_schedule(Queue, device, tail_latency):
+    task = Queue.pop(0)
+    task.schedule_time = tail_latency
+    device.assign(task)
 
-def sjf_schedule(Queue, device):
+
+def sjf_schedule(Queue, device, tail_latency):
     Queue.sort()
-    device.assign(Queue.pop(0))
+    task = Queue.pop(0)
+    task.schedule_time = tail_latency
+    device.assign(task)
+
+def nonavie_schedule(Queue, device, tail_latency):
+    Queue.sort()
+    if device.name == "GPU (2060)":
+        task = Queue.pop(len(Queue) - 1)
+        task.schedule_time = tail_latency
+        device.assign(task)
+    else:
+        task = Queue.pop(0)
+        task.schedule_time = tail_latency
+        device.assign(task)
+
+def navie_schedule(Queue, device, tail_latency):
+    Queue.sort()
+    if device.name == "GPU (2060)":
+        task = Queue.pop(0)
+        task.schedule_time = tail_latency
+        device.assign(task)
+    else:
+        task = Queue.pop(len(Queue) - 1)
+        task.schedule_time = tail_latency
+        device.assign(task)
 
 def main():
     logging.basicConfig(filename='info.log',
@@ -90,35 +136,75 @@ def main():
     Devices.append(GPU_0)
     Devices.append(GPU_1)
 
-    results = []
-    for j in tqdm(range(100)):
-        N = 1000
-        for _ in range(N):
-            Tasks.append(Task(ResNet, arrival_time=random.randint(0, 4e8)))
-            Tasks.append(Task(AlexNet, arrival_time=random.randint(0, 4e8)))
-            Tasks.append(Task(RNN, arrival_time=random.randint(0, 4e8)))
-        Tasks = sorted(Tasks, key=lambda x: x.arrival_time)
-        tail_latency = emulate(Tasks, Devices, fifo_schedule)
-        results.append(tail_latency)
-    df = pd.DataFrame(results)
-    print("FIFO result:")
-    print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
+    for rate in (1/10000, 1/500000, 1/100000, 1/1000000, 1/5000000, 1/10000000, 1/100000000):
+        test_data = []
 
-    results = []
-    for j in tqdm(range(100)):
-        N = 1000
-        for _ in range(N):
-            Tasks.append(Task(ResNet, arrival_time=random.randint(0, 4e8)))
-            Tasks.append(Task(AlexNet, arrival_time=random.randint(0, 4e8)))
-            Tasks.append(Task(RNN, arrival_time=random.randint(0, 4e8)))
-        random.shuffle(Tasks)
-        Tasks = sorted(Tasks, key=lambda x: x.arrival_time)
-        tail_latency = emulate(Tasks, Devices, sjf_schedule)
-        results.append(tail_latency)
-    df = pd.DataFrame(results)
-    print("SJF result:")
-    print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
+        N = 5
+        tasks_size = 100
+        test_datas = []
+        for i in range(N):
+            now = 0
+            for _ in range(tasks_size):
+                now+=nextTime(rate)
+                test_data.append(Task(random.choice((ResNet, AlexNet, RNN)), arrival_time=now))
+            test_data = sorted(test_data, key=lambda x: x.arrival_time)
+            test_datas.append(test_data)
+
+        results = []
+        for j in tqdm(range(N)):
+            test_data = test_datas[j]
+            Tasks = deepcopy(test_data)
+            tail_latency = emulate(Tasks, Devices, navie_schedule)
+            results.append(tail_latency)
+            # results.append(sum([task.schedule_time - task.arrival_time for task in Tasks]))
+        df = pd.DataFrame(results)
+        # print("Navie result:")
+        # print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
+        navie_mean = sum(results) / len(results)
+
+        results = []
+        for j in tqdm(range(N)):
+            test_data = test_datas[j]
+            Tasks = deepcopy(test_data)
+            tail_latency = emulate(Tasks, Devices, nonavie_schedule)
+            results.append(tail_latency)
+            # results.append(sum([task.schedule_time - task.arrival_time for task in Tasks]))
+        df = pd.DataFrame(results)
+        # print("Navie result:")
+        # print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
+        nonavie_mean = sum(results) / len(results)
+
+        results = []
+        for j in tqdm(range(N)):
+            test_data = test_datas[j]
+            Tasks = deepcopy(test_data)
+            Tasks = sorted(Tasks, key=lambda x: x.arrival_time)
+            tail_latency = emulate(Tasks, Devices, fifo_schedule)
+            results.append(tail_latency)
+            # results.append(sum([task.schedule_time - task.arrival_time for task in Tasks]))
+        df = pd.DataFrame(results)
+        # print("FIFO result:")
+        # print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
+        fifo_mean = sum(results) / len(results)
+
+        results = []
+        for j in tqdm(range(N)):
+            test_data = test_datas[j]
+            Tasks = deepcopy(test_data)
+            Tasks = sorted(Tasks, key=lambda x: x.arrival_time)
+            tail_latency = emulate(Tasks, Devices, sjf_schedule)
+            results.append(tail_latency)
+            # results.append(sum([task.schedule_time - task.arrival_time for task in Tasks]))
+        df = pd.DataFrame(results)
+        # print("SJF result:")
+        # print(df.describe().apply(lambda s: s.apply(lambda x: format(x, 'g'))))
+        sjf_mean = sum(results) / len(results)
+
+
+        print(navie_mean, fifo_mean, sjf_mean, nonavie_mean)
+        print(rate, navie_mean / fifo_mean, navie_mean / sjf_mean, navie_mean / nonavie_mean)
 
 
 if __name__ == "__main__":
+    # print(nextTime(1/100000))
     main()

@@ -1,9 +1,10 @@
+"""Utilities for model construction."""
 import torch
 import pandas as pd
 
 
 def get_children(model: torch.nn.Module):
-    # get children form model
+    """Get children form model."""
     children = list(model.children())
     flatt_children = []
     if children == []:
@@ -20,6 +21,7 @@ def get_children(model: torch.nn.Module):
 
 
 def get_all_shape(model):
+    """Get all temporary data shape."""
     children = get_children(model)
     all_input_shape = list()
 
@@ -41,6 +43,7 @@ def get_all_shape(model):
 
 
 def prune_df(df):
+    """Purne hidden layers."""
     trash_list = list()
 
     for i in range(len(df)):

@@ -6,6 +6,7 @@ from torchvision.models import resnet18, vgg16, alexnet, mobilenet_v3_large
 
 
 def get_rnn(gpu_list):
+    """Return a RNN model."""
     max_batch = 3
     rnn_layer = dict()
     for i in range(1, max_batch + 1):

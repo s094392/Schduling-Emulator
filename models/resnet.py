@@ -6,6 +6,7 @@ from torchvision.models import resnet18, vgg16, alexnet, mobilenet_v3_large
 
 
 def get_resnet(gpu_list):
+    """Return a Resnet model."""
     max_batch = 3
     resnet_layer = dict()
     for i in range(1, max_batch + 1):

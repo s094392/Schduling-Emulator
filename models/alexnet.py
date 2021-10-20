@@ -4,6 +4,7 @@ from objects import Model
 from .utils import prune_df, get_all_shape
 from torchvision.models import resnet18, vgg16, alexnet, mobilenet_v3_large
 
+
 def get_alexnet(gpu_list):
     max_batch = 3
     alexnet_layer = dict()
@@ -12,7 +13,8 @@ def get_alexnet(gpu_list):
             filename = f"data/AlexNet/AlexNet_{gpu.csv_name}_{i}.csv"
             if not i in alexnet_layer:
                 alexnet_layer[i] = dict()
-            alexnet_layer[i][gpu.id] = prune_df(pd.read_csv(filename))['duration']
+            alexnet_layer[i][gpu.id] = prune_df(
+                pd.read_csv(filename))['duration']
 
     AlexNet = Model("AlexNet", get_all_shape(alexnet()), alexnet_layer)
     return AlexNet

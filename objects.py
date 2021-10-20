@@ -37,7 +37,8 @@ class Device:
             f"[Log] Assign layer {task.current_layer} of task {task.model.name} ({task.arrival_time})to device {self.name}"
         )
         model = task.model
-        layer_latency = model.layer_latency[1][self.GPUSpec.id][task.current_layer]
+        layer_latency = model.layer_latency[1][self.GPUSpec.id][
+            task.current_layer]
         self.remain_time = layer_latency
         self.task = task
 
@@ -46,7 +47,8 @@ class Model:
     def __init__(self, name, layer_input_shape, layer_latency):
         self.id = uuid.uuid4()
         self.name = name
-        self.size = sum([sum(i[1]) for i in layer_latency[1].items()]) / len(layer_latency[1])
+        self.size = sum([sum(i[1]) for i in layer_latency[1].items()]) / len(
+            layer_latency[1])
         self.layer_input_shape = layer_input_shape
 
         self.layer_latency = layer_latency
@@ -58,7 +60,6 @@ class Model:
         for batch_size in self.layer_latency:
             # print(type(self.layer_latency[batch_size][GPU]))
             self.layer_latency[batch_size][GPU] *= rate
-
 
     @staticmethod
     def get_movement_time(layer_input_shape):
@@ -76,7 +77,11 @@ class Model:
 
 
 class Task:
-    def __init__(self, model, current_layer=0, input_data_position=0, arrival_time=0):
+    def __init__(self,
+                 model,
+                 current_layer=0,
+                 input_data_position=0,
+                 arrival_time=0):
         self.id = uuid.uuid4()
         self.model = model
         self.current_layer = current_layer

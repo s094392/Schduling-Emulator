@@ -176,7 +176,6 @@ def main():
     Devices.append(GPU_0)
     Devices.append(GPU_1)
 
-
     # Evaluate the scheduler with different poisson rate.
     for rate in (1 / 10000, 1 / 500000, 1 / 100000, 1 / 1000000, 1 / 5000000,
                  1 / 10000000, 1 / 100000000):

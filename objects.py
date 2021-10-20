@@ -1,3 +1,4 @@
+import numpy as np
 import logging
 import uuid
 import torch
@@ -36,8 +37,7 @@ class Device:
             f"[Log] Assign layer {task.current_layer} of task {task.model.name} ({task.arrival_time})to device {self.name}"
         )
         model = task.model
-        layer_latency = model.layer_latency[1][self.GPUSpec.id][
-            task.current_layer]
+        layer_latency = model.layer_latency[1][self.GPUSpec.id][task.current_layer]
         self.remain_time = layer_latency
         self.task = task
 
@@ -48,9 +48,16 @@ class Model:
         self.name = name
         self.size = sum([sum(i[1]) for i in layer_latency[1].items()]) / len(layer_latency[1])
         self.layer_input_shape = layer_input_shape
+
         self.layer_latency = layer_latency
         self.layer_movement_time = self.get_movement_time(
             self.layer_input_shape)
+
+    def adjust_latency(self, GPU, rate):
+        """Adjust the latency of specific GPU."""
+        for batch_size in self.layer_latency:
+            # print(type(self.layer_latency[batch_size][GPU]))
+            self.layer_latency[batch_size][GPU] *= rate
 
 
     @staticmethod

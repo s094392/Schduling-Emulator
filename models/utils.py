@@ -52,4 +52,5 @@ def prune_df(df):
     for i in trash_list:
         df.at[i - 1,
               'duration'] = df.iloc[i]['duration'] + df.iloc[i - 1]['duration']
-    return df.drop(trash_list).reset_index()
+    df = df.drop(trash_list).reset_index()
+    return df

@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 import logging
 import uuid
@@ -37,18 +38,41 @@ class Device:
             f"[Log] Assign layer {task.current_layer} of task {task.model.name} ({task.arrival_time})to device {self.name}"
         )
         model = task.model
-        layer_latency = model.layer_latency[1][self.GPUSpec.id][
+        layer_latency = model.layer_latency[task.batch_size][self.GPUSpec.id][
             task.current_layer]
         self.remain_time = layer_latency
         self.task = task
+
+    def move(self, device):
+        logging.info(
+            f"[Log] move task {task.model.name} ({task.arrival_time}) from device {self.name} to device {device.name}"
+        )
+        device.task = self.task
+        self.task = None
+
+    def move_and_assign(self, device, task):
+        self.move(device)
+        self.assign(task)
+
+    def batch_and_assign(self, task):
+        assert (task.model == self.task.model)
+        current_layer = self.task.current_layer
+        model = task.model
+        layer_latency = {}
+        layer_latency[1] = {}
+        for gpu in model.layer_latency[1]:
+            layer_latency[1][gpu] = pd.concat([
+                model.layer_latency[1][gpu][:current_layer],
+                model.layer_latency[2][gpu][current_layer:]], ignore_index=True)
+        new_model = Model(f"{task.id} + {self.task.id}",
+                          model.layer_input_shape, layer_latency)
+        self.task = Task(new_model, arrival_time=0, batch_size=1)
 
 
 class Model:
     def __init__(self, name, layer_input_shape, layer_latency):
         self.id = uuid.uuid4()
         self.name = name
-        self.size = sum([sum(i[1]) for i in layer_latency[1].items()]) / len(
-            layer_latency[1])
         self.layer_input_shape = layer_input_shape
 
         self.layer_latency = layer_latency
@@ -81,13 +105,19 @@ class Task:
                  model,
                  current_layer=0,
                  input_data_position=0,
-                 arrival_time=0):
+                 arrival_time=0,
+                 batch_size=1):
         self.id = uuid.uuid4()
         self.model = model
         self.current_layer = current_layer
-        self.input_date_position = input_data_position
+        self.batch_size = batch_size
+        self.size = sum([
+            sum(i[1])
+            for i in self.model.layer_latency[self.batch_size].items()
+        ]) / len(self.model.layer_latency[self.batch_size])
+        self.input_data_position = input_data_position
         self.arrival_time = arrival_time
         self.schedule_time = 0
 
     def __lt__(self, other):
-        return self.model.size < other.model.size
+        return self.size < other.size

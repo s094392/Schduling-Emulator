@@ -37,7 +37,7 @@ def emulate(Tasks, Devices, schedule):
                 if device.task:
                     min_delay = min((min_delay, device.remain_time))
         if len(Tasks):
-            min_delay = min((min_delay, Tasks[0].model.size))
+            min_delay = min((min_delay, Tasks[0].size))
 
         # update remain time of each deivce and assign next layer if avaliable
         for device in Devices:
@@ -107,6 +107,32 @@ def nonaive_schedule(Queue, device, tail_latency):
         task.schedule_time = tail_latency
         device.assign(task)
 
+def batch_schedule(Queue, device, tail_latency):
+    """Batch all possiable tasks in job queue."""
+    task_pairs = {}
+
+    for job in Queue:
+        task_pair = (job.model, job.current_layer)
+        max_batch = max(task_pair[0].layer_latency.keys())
+        if task_pair not in task_pairs:
+            task_pairs[task_pair] = []
+        # if job.batch_size < max_batch:
+        task_pairs[task_pair].append(job.batch_size)
+    
+    Queue.clear()
+
+    for task_pair in task_pairs:
+        total_batch = sum(task_pairs[task_pair])
+        max_batch = max(task_pair[0].layer_latency.keys())
+        while(total_batch):
+            # print(total_batch)
+            batch_size = min(total_batch, max_batch)
+            task = Task(task_pair[0], arrival_time=0, batch_size=batch_size)
+            total_batch -= task.batch_size
+            Queue.append(task)
+
+    naive_schedule(Queue, device, tail_latency)
+
 
 def naive_schedule(Queue, device, tail_latency):
     """Distribute the biggest task to the fastest GPU."""
@@ -162,7 +188,7 @@ def main():
     Models = []
 
     ResNet = get_resnet(gpu_list)
-    ResNet.adjust_latency(GPU_1080.id, 0.3)
+    # ResNet.adjust_latency(GPU_1080.id, 0.3)
     AlexNet = get_alexnet(gpu_list)
     RNN = get_rnn(gpu_list)
 
@@ -175,10 +201,17 @@ def main():
     GPU_1 = Device("GPU (1080)", device_type=DeviceType.GPU, GPUSpec=GPU_1080)
     Devices.append(GPU_0)
     Devices.append(GPU_1)
+    print(sum(ResNet.layer_latency[1][GPU_2060.id]))
+    print(sum(ResNet.layer_latency[1][GPU_1080.id]))
+    print(sum(AlexNet.layer_latency[1][GPU_2060.id]))
+    print(sum(AlexNet.layer_latency[1][GPU_1080.id]))
+    print(sum(RNN.layer_latency[1][GPU_2060.id]))
+    print(sum(RNN.layer_latency[1][GPU_1080.id]))
 
     # Evaluate the scheduler with different poisson rate.
-    for rate in (1 / 10000, 1 / 500000, 1 / 100000, 1 / 1000000, 1 / 5000000,
-                 1 / 10000000, 1 / 100000000):
+    for interval in (100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000,
+                 10000000, 50000000, 100000000):
+        rate = 1 / interval
         test_data = []
 
         N = 5
@@ -191,10 +224,11 @@ def main():
         fifo_mean = evaluate(Devices, test_datas, fifo_schedule, N)
         sjf_mean = evaluate(Devices, test_datas, sjf_schedule, N)
         nonaive_mean = evaluate(Devices, test_datas, nonaive_schedule, N)
+        batch_mean = evaluate(Devices, test_datas, batch_schedule, N)
 
         # Compare the speedup with naive scheduler and others.
-        print(1 / rate, naive_mean / fifo_mean, naive_mean / sjf_mean,
-              naive_mean / nonaive_mean)
+        print(f"{interval}:", naive_mean / fifo_mean, naive_mean / sjf_mean,
+              naive_mean / nonaive_mean, naive_mean/batch_mean)
 
 
 if __name__ == "__main__":

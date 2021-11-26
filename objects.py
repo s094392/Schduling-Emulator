@@ -32,6 +32,20 @@ class Device:
         self.type = device_type
         self.task = task
         self.remain_time = 0
+        self.layer_remain_time = 0
+
+    def forward(self, task):
+        logging.info(
+            f"[Log] Assign layer {task.current_layer} of task {task.model.name} ({task.arrival_time})to device {self.name}"
+        )
+        model = task.model
+        layer_latency = model.layer_latency[task.batch_size][self.GPUSpec.id][
+            task.current_layer]
+        self.layer_remain_time = layer_latency
+        last_layer_latency = model.layer_latency[task.batch_size][self.GPUSpec.id][
+            task.current_layer - 1]
+        self.remain_time = self.remain_time - last_layer_latency
+        self.task = task
 
     def assign(self, task):
         logging.info(
@@ -40,7 +54,9 @@ class Device:
         model = task.model
         layer_latency = model.layer_latency[task.batch_size][self.GPUSpec.id][
             task.current_layer]
-        self.remain_time = layer_latency
+        self.layer_remain_time = layer_latency
+        self.remain_time = sum(model.layer_latency[task.batch_size][self.GPUSpec.id][
+                task.current_layer:])
         self.task = task
 
     def move(self, device):
@@ -78,6 +94,10 @@ class Model:
         self.layer_latency = layer_latency
         self.layer_movement_time = self.get_movement_time(
             self.layer_input_shape)
+
+        self.gpu_size = {}
+        for gpu in layer_latency[1]:
+            self.gpu_size[gpu] = sum(layer_latency[1][gpu])
 
     def adjust_latency(self, GPU, rate):
         """Adjust the latency of specific GPU."""
